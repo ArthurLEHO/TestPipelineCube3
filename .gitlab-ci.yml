@@ -1,0 +1,63 @@
+# Force : On définit des stages clairs
+stages:
+  - quality
+  - test
+  - build
+  - deploy
+
+# Force : Utilisation du cache global entre les jobs
+cache:
+  paths:
+    - .pip-cache/
+
+# TECHNIQUE AVANCÉE : Les "Hidden Jobs" et "Anchors" (&)
+# C'est une spécificité GitLab pour éviter de répéter le script d'installation
+.setup_template: &setup_script
+  before_script:
+    - pip install -r requirements.txt --cache-dir .pip-cache
+
+# ÉTAPE 1 : Qualité
+linting:
+  stage: quality
+  image: python:3.10
+  <<: *setup_template # On injecte le script défini plus haut
+  script:
+    - pip install flake8
+    - flake8 app.py
+
+# ÉTAPE 2 : Tests (Utilisation de parallel:matrix)
+# GitLab a copié cette fonctionnalité de GitHub, mais la syntaxe est différente
+tests_matrix:
+  stage: test
+  image: python:$PYTHON_VERSION # L'image Docker change dynamiquement
+  <<: *setup_template
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.9", "3.10", "3.11"]
+  script:
+    - pytest
+
+# ÉTAPE 3 : Build
+build_package:
+  stage: build
+  image: python:3.10-slim
+  script:
+    - mkdir dist
+    - echo "Binary built at $(date)" > dist/app.bin
+  artifacts: # Force : Gestion native et simple des artefacts
+    paths:
+      - dist/
+    expire_in: 1 hour
+
+# ÉTAPE 4 : Déploiement
+deploy_prod:
+  stage: deploy
+  image: alpine:latest # On change d'OS pour le déploiement (très léger)
+  only:
+    - main # Équivalent du "if" de GitHub
+  environment: # Force : Tableau de bord des environnements très puissant chez GitLab
+    name: production
+    url: https://mon-app-prod.com
+  script:
+    - echo "Deploying artifact..."
+    - cat dist/app.bin # Preuve qu'on a bien récupéré l'artefact automatiquement

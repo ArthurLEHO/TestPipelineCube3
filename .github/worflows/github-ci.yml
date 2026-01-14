@@ -1,0 +1,75 @@
+name: 🚀 Pipeline GitHub
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ÉTAPE 1 : Qualité du code
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip' # Force : Caching natif en 1 ligne
+      - name: Run Linter
+        run: |
+          pip install flake8
+          flake8 app.py
+
+  # ÉTAPE 2 : Tests (La "Killer Feature" de GitHub : La Matrice)
+  # Cela va créer automatiquement 3 jobs en parallèle sans dupliquer le code
+  test-matrix:
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install & Test
+        run: |
+          pip install -r requirements.txt
+          pytest
+
+  # ÉTAPE 3 : Build (Création de l'artefact)
+  build:
+    needs: test-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Fake Binary
+        run: |
+          mkdir dist
+          echo "Binary built at $(date)" > dist/app.bin
+      
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4 # Force : Intégration marketplace
+        with:
+          name: production-binary
+          path: dist/app.bin
+
+  # ÉTAPE 4 : Déploiement (Simulé)
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Condition : Seulement sur la branche main
+    environment: production # Force : Gestion des environnements GitHub
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: production-binary
+      - name: Deploy to Server
+        run: echo "Deploying version..."
