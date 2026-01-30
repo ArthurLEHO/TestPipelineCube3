@@ -27,15 +27,18 @@
 ✅ Maintenance par la communauté  
 ✅ Gain de temps énorme
 
-#### 2. **Multi-OS natif**
+#### 2. **Multi-OS natif** ⭐
 ```yaml
-strategy:
-  matrix:
-    os: [ubuntu-latest, windows-latest, macos-latest]
+tests-multi-os:
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, windows-latest, macos-latest]
 ```
-✅ Windows, Linux, macOS  
-✅ Tests cross-platform faciles  
-❌ GitLab : Nécessite des runners spécifiques
+✅ **Windows, Linux, macOS en parallèle**  
+✅ Tests cross-platform automatiques  
+✅ Aucune infrastructure supplémentaire nécessaire  
+❌ GitLab : **Impossible sans runners custom self-hosted**
 
 #### 3. **Triggers flexibles**
 ```yaml
@@ -161,6 +164,7 @@ job1:
 | **Syntaxe `if:`** | `github.ref == 'refs/heads/main'` peu lisible |
 | **Pas de stages** | Difficulté à visualiser le flow |
 | **Cache complexe** | `actions/cache` + clés manuelles |
+| **Services limités à Linux** | Redis, PostgreSQL uniquement sur ubuntu-latest |
 
 ### GitLab CI - Limites
 
@@ -192,9 +196,10 @@ job1:
 
 ### Choisir **GitHub Actions** si :
 - ✅ Vous êtes déjà sur GitHub
-- ✅ Vous avez besoin de **multi-OS** (Windows, macOS)
-- ✅ Vous voulez utiliser des **actions du marketplace**
+- ✅ **Vous avez besoin de multi-OS** (Windows, macOS) ⭐ KILLER FEATURE
+- ✅ Vous voulez utiliser des **actions du marketplace** (20k+ actions)
 - ✅ Vous avez des projets open-source (gratuit illimité)
+- ✅ Vous voulez un écosystème riche d'intégrations
 
 ### Choisir **GitLab CI** si :
 - ✅ Vous voulez une **interface visuelle** exceptionnelle

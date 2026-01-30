@@ -42,23 +42,18 @@ jobs:
         run: flake8 app.py
 
   # ============================================
-  # ÉTAPE 2 : TESTS MATRICIELS
+  # ÉTAPE 2A : TESTS AVEC SERVICES (Linux uniquement)
   # ============================================
-  # Force GitHub : Matrix strategy très puissante et lisible
-  tests:
-    name: Tests on Python ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }} # On peut aussi faire varier l'OS
+  # Force GitHub : Services (containers) très simples à configurer
+  tests-with-services:
+    name: Tests with Redis on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest # Services Docker nécessitent Linux
     
     strategy:
-      fail-fast: false # Continue même si une version échoue
+      fail-fast: false
       matrix:
         python-version: ['3.9', '3.10', '3.11']
-        os: [ubuntu-latest, windows-latest] # Force : Multi-OS natif
-        exclude: # Force : Exclusions précises dans la matrice
-          - os: windows-latest
-            python-version: '3.9'
     
-    # Force GitHub : Services (containers) très simples à configurer
     services:
       redis:
         image: redis:alpine
@@ -89,9 +84,38 @@ jobs:
       # Force GitHub : Intégration native avec des services tiers
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
-        if: matrix.python-version == '3.10' && matrix.os == 'ubuntu-latest'
+        if: matrix.python-version == '3.10'
         with:
           file: ./coverage.xml
+
+  # ============================================
+  # ÉTAPE 2B : TESTS MULTI-OS
+  # ============================================
+  # Force GitHub : Multi-OS natif (impossible avec GitLab sans runners custom)
+  tests-multi-os:
+    name: Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.11']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+      
+      - name: Run tests
+        run: pytest
 
   # ============================================
   # ÉTAPE 3 : BUILD
@@ -99,7 +123,7 @@ jobs:
   build:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [linting, tests] # Force : Dependencies explicites (DAG)
+    needs: [linting, tests-with-services, tests-multi-os] # Force : Dependencies explicites (DAG)
     
     steps:
       - uses: actions/checkout@v4
