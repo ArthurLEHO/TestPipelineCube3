@@ -1,0 +1,199 @@
+# GITHUB ACTIONS - Comparaison avec GitLab CI
+# Syntaxe : YAML mais structure différente (jobs au lieu de stages)
+
+name: CI/CD Pipeline
+
+# Force GitHub : Triggers très flexibles et clairs
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: # Force : Déclenchement manuel depuis l'interface
+  schedule:
+    - cron: '0 2 * * 1' # Tous les lundis à 2h (cron natif)
+
+# Force GitHub : Variables d'environnement globales
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  # ============================================
+  # ÉTAPE 1 : QUALITÉ DU CODE
+  # ============================================
+  linting:
+    name: Code Quality Check
+    runs-on: ubuntu-latest # Limite GitHub : Pas de choix d'image Docker custom par défaut
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4 # Force GitHub : Marketplace d'actions réutilisables
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5 # Action officielle maintenue par GitHub
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip' # Force : Cache intégré et automatique
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt flake8
+      
+      - name: Run linting
+        run: flake8 app.py
+
+  # ============================================
+  # ÉTAPE 2 : TESTS MATRICIELS
+  # ============================================
+  # Force GitHub : Matrix strategy très puissante et lisible
+  tests:
+    name: Tests on Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }} # On peut aussi faire varier l'OS
+    
+    strategy:
+      fail-fast: false # Continue même si une version échoue
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+        os: [ubuntu-latest, windows-latest] # Force : Multi-OS natif
+        exclude: # Force : Exclusions précises dans la matrice
+          - os: windows-latest
+            python-version: '3.9'
+    
+    # Force GitHub : Services (containers) très simples à configurer
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+      
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=app --cov-report=xml --cov-report=term
+      
+      # Force GitHub : Intégration native avec des services tiers
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.10' && matrix.os == 'ubuntu-latest'
+        with:
+          file: ./coverage.xml
+
+  # ============================================
+  # ÉTAPE 3 : BUILD
+  # ============================================
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    needs: [linting, tests] # Force : Dependencies explicites (DAG)
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build artifact
+        run: |
+          mkdir -p dist
+          echo "Binary built at $(date)" > dist/app.bin
+      
+      # Limite GitHub : Artifacts plus verbeux que GitLab
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: dist/
+          retention-days: 1 # Équivalent de expire_in
+
+  # ============================================
+  # ÉTAPE 4 : DÉPLOIEMENT STAGING
+  # ============================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop' # Limite : Syntaxe moins claire que GitLab
+    
+    environment:
+      name: staging
+      url: https://staging.mon-app.com
+    
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4 # Limite : Téléchargement manuel nécessaire
+        with:
+          name: build-artifact
+          path: dist/
+      
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging..."
+          cat dist/app.bin
+      
+      # Force GitHub : Secrets sécurisés
+      - name: Notify deployment
+        run: echo "Would notify via Slack webhook (if configured)"
+
+  # ============================================
+  # ÉTAPE 5 : DÉPLOIEMENT PRODUCTION
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    
+    environment:
+      name: production
+      url: https://mon-app-prod.com
+    
+    # Force GitHub : Timeouts configurables
+    timeout-minutes: 10
+    
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: dist/
+      
+      - name: Deploy to production
+        run: |
+          echo "Deploying artifact..."
+          cat dist/app.bin
+      
+      # Force GitHub : Retry possible via actions du marketplace
+      - name: Health check
+        run: |
+          for i in 1 2 3; do
+            echo "Health check attempt $i"
+            sleep 2
+            if echo "Health check passed"; then
+              exit 0
+            fi
+          done
+
+  # ============================================
+  # JOB DE NETTOYAGE
+  # ============================================
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() # Force : Exécution conditionnelle avancée
+    
+    steps:
+      - name: Clean up resources
+        run: echo "Cleaning up temporary resources..."
