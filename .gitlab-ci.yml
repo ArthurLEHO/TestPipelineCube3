@@ -1,21 +1,17 @@
 # GITLAB CI - Comparaison avec GitHub Actions
-# Force GitLab : Pipeline visuel très clair avec stages séquentiels
+# Projet : Site web statique avec pipeline CI/CD
 
-# Force GitLab : Workflow rules - Contrôle global de l'exécution du pipeline
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "develop"
-    - if: $CI_PIPELINE_SOURCE == "schedule" # Support natif des pipelines programmés
+    - if: $CI_PIPELINE_SOURCE == "schedule"
 
-# Force GitLab : Variables globales avec valeurs par défaut
 variables:
-  PYTHON_VERSION: "3.10"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-  # Force : Variables protégées pour la prod (dans Settings > CI/CD)
+  NODE_VERSION: "20"
+  NPM_CACHE_DIR: "$CI_PROJECT_DIR/.npm-cache"
 
-# Force : On définit des stages clairs et séquentiels
 stages:
   - quality
   - test
@@ -24,95 +20,66 @@ stages:
   - deploy-production
   - cleanup
 
-# Force GitLab : Cache global intelligent entre les jobs
 cache:
   key:
     files:
-      - requirements.txt # Le cache change si requirements.txt change
+      - package-lock.json
   paths:
-    - .pip-cache/
+    - .npm-cache/
+    - node_modules/
 
-# TECHNIQUE AVANCÉE : Les "Hidden Jobs" et "Anchors" (&)
-# Force GitLab : Réutilisation de config avec anchors YAML natif
-.setup_template: &setup_template
+.node_template: &node_template
+  image: node:20-alpine
   before_script:
-    - pip install -r requirements.txt --cache-dir $PIP_CACHE_DIR
+    - npm install --cache $NPM_CACHE_DIR
 
-# ÉTAPE 1 : Qualité
 linting:
   stage: quality
-  image: python:3.10
-  <<: *setup_template # On injecte le script défini plus haut
+  <<: *node_template
   script:
-    - pip install flake8
-    - flake8 app.py
+    - echo 'Checking code quality...'
+    - npm test
 
-# ÉTAPE 2 : Tests (Utilisation de parallel:matrix)
-# Force GitLab : Matrix avec variables d'environnement
-tests_matrix:
+tests:
   stage: test
-  image: python:$PYTHON_VERSION # Force : Images Docker custom par défaut
-  <<: *setup_template
-  
-  # Force GitLab : Services (containers) très simples
-  services:
-    - redis:alpine
-  
-  parallel:
-    matrix:
-      - PYTHON_VERSION: ["3.9", "3.10", "3.11"]
-  
+  <<: *node_template
   script:
-    - pip install pytest pytest-cov
-    - pytest --cov=app --cov-report=xml --cov-report=term
-  
-  # Force GitLab : Coverage reports intégrés nativement
-  coverage: '/TOTAL.*\s+(\d+%)$/'
+    - npm test
   
   artifacts:
-    reports:
-      coverage_report:
-        coverage_format: cobertura
-        path: coverage.xml
-    when: always # Force : Artefacts même en cas d'échec
+    when: always
     expire_in: 1 week
+    reports:
+      junit: test-results.xml
   
-  # Force GitLab : Retry automatique
   retry:
     max: 2
     when:
       - runner_system_failure
       - stuck_or_timeout_failure
 
-# ÉTAPE 3 : Build
-build_package:
+build_website:
   stage: build
-  image: python:3.10-slim
+  <<: *node_template
   
-  # Force GitLab : Dependencies avec needs (DAG) pour parallélisation
   needs: 
     - job: linting
-    - job: tests_matrix
+    - job: tests
   
   script:
-    - mkdir -p dist
-    - echo "Binary built at $(date)" > dist/app.bin
+    - npm run build
+    - ls -la dist/
   
-  # Force GitLab : Artefacts automatiquement disponibles entre jobs
   artifacts:
-    name: "build-$CI_COMMIT_SHORT_SHA"
+    name: "website-$CI_COMMIT_SHORT_SHA"
     paths:
       - dist/
     expire_in: 1 hour
-    reports:
-      dotenv: build.env # Force : Variables d'environnement entre jobs
 
-# ÉTAPE 4A : Déploiement Staging
 deploy_staging:
   stage: deploy-staging
   image: alpine:latest
   
-  # Force GitLab : Rules plus puissantes que only/except
   rules:
     - if: $CI_COMMIT_BRANCH == "develop"
       when: always
@@ -121,14 +88,13 @@ deploy_staging:
   environment:
     name: staging
     url: https://staging.mon-app.com
-    on_stop: stop_staging # Force : Nettoyage automatique d'environnement
+    on_stop: stop_staging
   
   script:
-    - echo "Deploying to staging..."
-    - cat dist/app.bin
-    - echo "DEPLOY_TIME=$(date)" >> build.env
+    - echo 'Deploying to staging...'
+    - ls -la dist/
+    - cat dist/build.json
 
-# Force GitLab : Job manuel d'arrêt d'environnement
 stop_staging:
   stage: deploy-staging
   image: alpine:latest
@@ -139,43 +105,37 @@ stop_staging:
     name: staging
     action: stop
   script:
-    - echo "Stopping staging environment..."
+    - echo 'Stopping staging environment...'
 
-# ÉTAPE 4B : Déploiement Production avec approbation manuelle
 deploy_production:
   stage: deploy-production
   image: alpine:latest
   
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      when: manual # Force : Déploiement manuel requis pour la prod
+      when: manual
   
-  # Force GitLab : Environnement avec protection (Settings > CI/CD > Protected Environments)
   environment:
     name: production
     url: https://mon-app-prod.com
   
-  # Force GitLab : Timeout configurable
   timeout: 10 minutes
   
   script:
-    - echo "Deploying artifact to production..."
-    - cat dist/app.bin # Force : Récupération automatique des artefacts
-    - sleep 2
-    - echo "Deployment complete!"
+    - echo 'Deploying to production...'
+    - ls -la dist/
+    - cat dist/build.json
   
-  # Force GitLab : Notifications intégrées
   after_script:
-    - echo "Would send notification to Slack/Teams..."
+    - echo 'Would send notification to Slack/Teams...'
 
-# ÉTAPE 5 : Nettoyage
 cleanup:
   stage: cleanup
   image: alpine:latest
   
   rules:
-    - when: always # S'exécute toujours, même en cas d'échec
+    - when: always
   
   script:
-    - echo "Cleaning up temporary resources..."
+    - echo 'Cleaning up temporary resources...'
     - echo "Pipeline finished at $(date)"

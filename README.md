@@ -1,5 +1,54 @@
 # Comparaison GitHub Actions vs GitLab CI
 
+## 🌐 Projet : Site Web Statique avec CI/CD
+
+Ce projet démontre la mise en place de pipelines CI/CD pour un site web statique simple (HTML/CSS/JavaScript) en utilisant **GitHub Actions** et **GitLab CI**.
+
+> 📖 **[Voir PIPELINES.md](PIPELINES.md)** pour une explication détaillée étape par étape de chaque pipeline
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Tester localement
+
+```bash
+# Installer les dépendances
+npm install
+
+# Lancer les tests
+npm test
+
+# Builder le site
+npm run build
+
+# Servir le site localement
+npx serve .
+```
+
+Ouvrir http://localhost:3000 dans votre navigateur.
+
+---
+
+## 📁 Structure du projet
+
+```
+.
+├── index.html              # Page web principale
+├── styles.css              # Styles CSS
+├── script.js               # JavaScript interactif
+├── test.js                 # Tests automatisés
+├── build.js                # Script de build
+├── package.json            # Configuration npm
+├── .github/workflows/
+│   └── main.yml           # Pipeline GitHub Actions
+├── .gitlab-ci.yml         # Pipeline GitLab CI
+├── README.md              # Ce fichier
+└── PIPELINES.md           # Explication détaillée des pipelines
+```
+
+---
+
 ## 📊 Vue d'ensemble
 
 | Critère | GitHub Actions | GitLab CI |
@@ -10,6 +59,28 @@
 | **Docker** | Nécessite configuration | Natif ⭐ |
 | **Cache** | Via actions | Natif + intelligent ⭐ |
 | **Artefacts** | Upload/Download manuel | Automatique entre jobs ⭐ |
+| **Multi-OS** | Natif (Ubuntu/Windows/macOS) ⭐ | Nécessite runners custom |
+
+---
+
+## � Pipeline CI/CD
+
+Les deux pipelines effectuent les mêmes étapes :
+
+```
+Quality → Test → Build → Deploy Staging → Deploy Production → Cleanup
+```
+
+### Étapes du pipeline :
+
+1. **Quality** - Validation du code (linting)
+2. **Test** - Tests automatisés (+ multi-OS pour GitHub)
+3. **Build** - Construction du site → dossier `dist/`
+4. **Deploy Staging** - Déploiement auto sur `develop`
+5. **Deploy Production** - Déploiement manuel sur `main`
+6. **Cleanup** - Nettoyage des ressources
+
+> 📖 **[Voir PIPELINES.md](PIPELINES.md)** pour les détails de chaque étape
 
 ---
 
@@ -17,15 +88,15 @@
 
 ### GitHub Actions - Forces
 
-#### 1. **Marketplace d'actions réutilisables**
+#### 1. **Marketplace d'actions réutilisables** ⭐
 ```yaml
 - uses: actions/checkout@v4
-- uses: actions/setup-python@v5
-- uses: codecov/codecov-action@v4
+- uses: actions/setup-node@v4
+- uses: actions/upload-artifact@v4
 ```
 ✅ **20 000+ actions** prêtes à l'emploi  
 ✅ Maintenance par la communauté  
-✅ Gain de temps énorme
+✅ Gain de temps énorme (setup Node.js en 2 lignes)
 
 #### 2. **Multi-OS natif** ⭐
 ```yaml
@@ -53,13 +124,13 @@ on:
 ✅ `workflow_dispatch` pour UI  
 ✅ Events multiples (issues, releases, etc.)
 
-#### 4. **Intégrations GitHub**
+#### 4. **Intégrations GitHub** ⭐
 ```yaml
-- uses: github/codeql-action@v2  # Sécurité
-- uses: github/super-linter@v5   # Linting
+- uses: github/super-linter@v5   # Linting multi-langages
 ```
 ✅ Sécurité (Dependabot, CodeQL)  
-✅ Écosystème GitHub complet
+✅ Écosystème GitHub complet  
+✅ Déploiement GitHub Pages intégré
 
 ---
 
@@ -77,19 +148,19 @@ stages:
 ✅ Visualisation du flow complet  
 ✅ Compréhension immédiate
 
-#### 2. **Docker natif**
+#### 2. **Docker natif** ⭐
 ```yaml
-job:
-  image: python:3.10-alpine  # N'importe quelle image !
-  services:
-    - postgres:14
-    - redis:alpine
+linting:
+  image: node:20-alpine  # N'importe quelle image Docker !
+  
+build:
+  image: nginx:alpine    # Change d'image par job
 ```
-✅ Changement d'image par job  
-✅ Services très simples  
+✅ Changement d'image par job simple  
+✅ Léger (Alpine) ou complet selon besoin  
 ❌ GitHub : Nécessite `container:` ou actions
 
-#### 3. **Artefacts automatiques**
+#### 3. **Artefacts automatiques** ⭐
 ```yaml
 build:
   artifacts:
@@ -97,21 +168,23 @@ build:
     
 deploy:
   script:
-    - cat dist/app.bin  # Disponible automatiquement !
+    - ls dist/  # Disponible automatiquement !
 ```
 ✅ Pas besoin d'upload/download  
 ✅ Transmission entre stages native  
-❌ GitHub : `upload-artifact` + `download-artifact`
-
-#### 4. **Cache intelligent**
+✅ Simple et intuitif  
+❌ GitHub : `upload-artifact` + `download-artifact` manuels
+ ⭐
 ```yaml
 cache:
   key:
-    files: [requirements.txt]  # Change si requirements change
-  paths: [.pip-cache/]
+    files: [package-lock.json]  # Change si package-lock change
+  paths: [node_modules/]
 ```
 ✅ Cache basé sur fichiers  
 ✅ Gestion automatique  
+✅ Plus rapide que GitHub  
+❌ GitHub : Nécessite `actions/cache` avec clés manuelles
 ✅ Plus rapide que GitHub
 
 #### 5. **Rules avancées**
@@ -168,7 +241,31 @@ job1:
 
 ### GitLab CI - Limites
 
-| Problème | Impact |
+| P⚡ Déclenchement des Pipelines
+
+### GitHub Actions
+```bash
+# Push sur main → déploiement production
+git push origin main
+
+# Push sur develop → déploiement staging
+git push origin develop
+
+# Ou déclenchement manuel via l'UI GitHub
+```
+
+### GitLab CI
+```bash
+# Push sur main → attente déploiement manuel production
+git push origin main
+
+# Push sur develop → déploiement automatique staging
+git push origin develop
+```
+
+---
+
+## 🔄 Équivalences Syntaxiquact |
 |----------|--------|
 | **Pas de marketplace** | Réinventer la roue |
 | **Mono-OS** | Besoin de runners custom pour Windows/macOS |
@@ -180,14 +277,29 @@ job1:
 ## 🔄 Équivalences
 
 | GitLab CI | GitHub Actions |
-|-----------|----------------|
-| `image: python:3.10` | `runs-on: ubuntu-latest` + `uses: actions/setup-python@v5` |
+|---------node:20-alpine` | `runs-on: ubuntu-latest` + `uses: actions/setup-node@v4` |
 | `only: [main]` | `if: github.ref == 'refs/heads/main'` |
 | `artifacts:` | `uses: actions/upload-artifact@v4` |
-| `services:` | `services:` (identique) |
+| `services:` | `services:` (identique, mais limité à Linux) |
 | `needs:` | `needs:` (identique) |
 | `when: manual` | `environment:` avec protection |
 | `rules:` | `if:` (moins puissant) |
+| `cache:` | `actions/cache@v3` |
+
+---
+
+## 🧪 Tester localement
+
+```bash
+# Ouvrir le site web
+npx serve .
+
+# Lancer les tests
+npm test
+
+# Builder le site
+npm run build
+```t) |
 | `cache:` | `actions/cache@v3` |
 
 ---

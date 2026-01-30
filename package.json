@@ -1,0 +1,24 @@
+{
+  "name": "cicd-demo-website",
+  "version": "1.0.0",
+  "description": "Site web statique pour démonstration CI/CD",
+  "main": "index.html",
+  "scripts": {
+    "test": "node test.js",
+    "lint:html": "html-validate *.html",
+    "lint:css": "stylelint **/*.css",
+    "lint:js": "eslint *.js",
+    "lint": "npm run lint:html && npm run lint:css && npm run lint:js",
+    "build": "node build.js",
+    "serve": "npx serve ."
+  },
+  "keywords": ["cicd", "demo", "github-actions", "gitlab-ci"],
+  "author": "Demo Project",
+  "license": "MIT",
+  "devDependencies": {
+    "html-validate": "^8.11.1",
+    "stylelint": "^16.1.0",
+    "stylelint-config-standard": "^36.0.0",
+    "eslint": "^8.56.0"
+  }
+}
