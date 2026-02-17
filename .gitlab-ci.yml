@@ -23,7 +23,7 @@ stages:
 cache:
   key:
     files:
-      - package-lock.json
+      - package.json
   paths:
     - .npm-cache/
     - node_modules/
@@ -49,8 +49,6 @@ tests:
   artifacts:
     when: always
     expire_in: 1 week
-    reports:
-      junit: test-results.xml
   
   retry:
     max: 2
